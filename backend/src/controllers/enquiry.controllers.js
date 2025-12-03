@@ -2,7 +2,7 @@ import { Enquiry } from "../models/enquiry.models.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
-import nodemailer from "nodemailer"
+import { Resend } from "resend"
 
 export const enquiryFromCustomer = asyncHandler(async (req, res) => {
     const { customerName, customerPhone, productName } = req.body
@@ -24,25 +24,18 @@ export const enquiryFromCustomer = asyncHandler(async (req, res) => {
     if (!createdEnquiry)
         throw new ApiError(404, "Error in creating enquiry")
 
-    const transporter = nodemailer.createTransport({
-        secure: true,
-        service: "gmail",
-        auth:
-        {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASSWORD
-        }
-    })
+    const resend = new Resend(process.env.RESEND_API_KEY)
 
-    await transporter.sendMail({
-        from: `Advance Telecom ${process.env.EMAIL_USER}`,
-        to: process.env.CLIENT_EMAIL,
-        subject: "Customer-Product Enquiry",
-        text: `New Enquiry Received:
+    try {
+        const emailResponse = await resend.emails.send({
+            from: `Advance Telecom <noreply@advancetelecom.co.in>`,
+            to: process.env.CLIENT_EMAIL,
+            subject: "Customer-Product Enquiry",
+            text: `New Enquiry Received:
                Customer Name: ${customerName}
                Customer Phone: ${customerPhone}
                Interested Product: ${productName}`,
-        html: `
+            html: `
                 <div style="
                 font-family: Arial, sans-serif;
                 padding: 20px;
@@ -131,7 +124,14 @@ export const enquiryFromCustomer = asyncHandler(async (req, res) => {
                 }
                 </style>
               `
-    })
+        })
+
+        if (emailResponse.error)
+            throw new ApiError(500, emailResponse.error.message)
+        
+    } catch (error) {
+        throw new ApiError(500, error.message || "Failed to send email notification")
+    }
 
     //for testing purposes
     //console.log("Preview URL:", nodemailer.getTestMessageUrl(info));
